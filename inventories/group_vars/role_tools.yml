@@ -1,0 +1,8 @@
+---
+# Pin versions on purpose: upgrading them is one of the Week 2 exercises.
+nexus_version: "3.98.1"
+sonarqube_version: "26.11.0.134175-community"
+postgres_version: "16"
+
+# Secrets come from environment variables on the machine running Ansible - never commit them.
+sonar_db_password: "{{ lookup('ansible.builtin.env', 'SONAR_DB_PASSWORD') }}"

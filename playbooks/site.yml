@@ -1,0 +1,33 @@
+---
+# Builds every server from scratch. Safe to re-run (idempotent).
+#   ansible-playbook playbooks/site.yml
+- name: Baseline for all servers
+  hosts: all
+  become: true
+  roles:
+    - baseline
+    - node_exporter
+
+- name: Docker hosts
+  hosts: role_jenkins:role_tools
+  become: true
+  roles:
+    - docker
+
+- name: Tools server (Nexus + SonarQube)
+  hosts: role_tools
+  become: true
+  roles:
+    - tools
+
+- name: Jenkins server
+  hosts: role_jenkins
+  become: true
+  roles:
+    - jenkins
+
+- name: Legacy web servers
+  hosts: role_web
+  become: true
+  roles:
+    - web

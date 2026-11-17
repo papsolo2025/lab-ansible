@@ -1,0 +1,55 @@
+---
+- name: Fail early if the SonarQube DB password is not set
+  ansible.builtin.assert:
+    that: sonar_db_password | length > 0
+    fail_msg: "export SONAR_DB_PASSWORD=... before running this playbook"
+
+# SonarQube's embedded Elasticsearch refuses to start without these kernel settings.
+- name: Kernel settings for SonarQube
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-sonarqube.conf
+    reload: true
+  loop:
+    - { key: vm.max_map_count, value: "524288" }
+    - { key: fs.file-max, value: "131072" }
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: /opt/tools
+    state: directory
+    mode: "0750"
+
+- name: Write docker compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/tools/docker-compose.yml
+    mode: "0640"
+
+- name: Start Nexus, SonarQube and its database
+  community.docker.docker_compose_v2:
+    project_src: /opt/tools
+    state: present
+    pull: missing
+
+- name: Wait for Nexus to come up (first start takes 2-4 minutes)
+  ansible.builtin.uri:
+    url: http://localhost:8081/service/rest/v1/status
+    status_code: 200
+  register: nexus_status
+  retries: 40
+  delay: 10
+  until: nexus_status.status == 200
+
+- name: Read the initial Nexus admin password (deleted by Nexus after first login)
+  ansible.builtin.command: docker exec nexus cat /nexus-data/admin.password
+  register: nexus_pw
+  changed_when: false
+  failed_when: false
+
+- name: Show next steps
+  ansible.builtin.debug:
+    msg:
+      - "Nexus:     http://{{ ansible_host }}:8081  user=admin  initial password={{ nexus_pw.stdout | default('already changed') }}"
+      - "SonarQube: http://{{ ansible_host }}:9000  user=admin  password=admin (you must change it)"

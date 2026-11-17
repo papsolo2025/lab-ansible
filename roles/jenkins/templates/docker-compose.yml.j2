@@ -1,0 +1,16 @@
+# Managed by Ansible
+services:
+  jenkins:
+    build: .
+    image: lab/jenkins:custom
+    container_name: jenkins
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    group_add:
+      - "{{ ansible_facts['getent_group']['docker'][1] }}"
+    volumes:
+      - /var/jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./casc.yaml:/var/jenkins_casc/casc.yaml:ro

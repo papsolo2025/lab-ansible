@@ -1,0 +1,14 @@
+# Same as aws_ec2.yml but connects to PRIVATE IPs - used by Jenkins jobs running inside the VPC.
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-west-2
+filters:
+  tag:Project: devops-lab
+  instance-state-name: running
+hostnames:
+  - tag:Name
+keyed_groups:
+  - key: tags.Role
+    prefix: role
+compose:
+  ansible_host: private_ip_address

@@ -1,0 +1,46 @@
+---
+# Nightly housekeeping: frees disk space before it becomes an incident.
+- name: Disk cleanup
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Vacuum systemd journal
+      ansible.builtin.command: journalctl --vacuum-size={{ journald_max_use }}
+      register: vacuum
+      changed_when: "'freed 0B' not in vacuum.stderr"
+
+    - name: Find rotated logs older than 7 days
+      ansible.builtin.find:
+        paths: /var/log
+        patterns: "*.gz,*.1,*.old"
+        age: 7d
+        recurse: true
+      register: old_logs
+
+    - name: Delete rotated logs older than 7 days
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_logs.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Remove unused Docker images and stopped containers (keeps volumes)
+      ansible.builtin.command: docker system prune -af --filter "until=168h"
+      when: "'role_jenkins' in group_names or 'role_tools' in group_names"
+      register: prune
+      changed_when: "'Total reclaimed space: 0B' not in prune.stdout"
+
+    - name: Clean apt cache
+      ansible.builtin.apt:
+        autoclean: true
+
+    - name: Report disk usage
+      ansible.builtin.command: df -h /
+      register: df
+      changed_when: false
+
+    - name: Show disk usage
+      ansible.builtin.debug:
+        var: df.stdout_lines

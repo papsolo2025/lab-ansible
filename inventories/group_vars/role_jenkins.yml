@@ -1,0 +1,20 @@
+---
+# Tool versions baked into the custom Jenkins image (bump them in the monthly upgrade exercise)
+kubectl_version: "1.36.6"
+helm_version: "4.3.2"
+terraform_version: "1.17.2"
+trivy_version: "0.76.2"
+
+jenkins_admin_password: "{{ lookup('ansible.builtin.env', 'JENKINS_ADMIN_PASSWORD') }}"
+
+lab_timezone: "America/Vancouver"
+aws_region: "us-west-2"
+cluster_name: "devops-lab"
+
+# Your GitHub repos (HTTPS URLs). Public repos are simplest for the lab - never commit secrets to them.
+github_user: "papsolo2025"
+lab_ops_repo: "https://github.com/{{ github_user }}/lab-ops.git"
+lab_app_repo: "https://github.com/{{ github_user }}/lab-app.git"
+lab_ansible_repo: "https://github.com/{{ github_user }}/lab-ansible.git"
+lab_terraform_repo: "https://github.com/{{ github_user }}/lab-terraform.git"
+lab_serverless_repo: "https://github.com/{{ github_user }}/lab-serverless.git"

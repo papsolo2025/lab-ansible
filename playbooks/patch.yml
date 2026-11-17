@@ -1,0 +1,54 @@
+---
+# Weekly OS patching - rolling, one server at a time, with pre/post checks.
+#   ansible-playbook playbooks/patch.yml --check          # dry run
+#   ansible-playbook playbooks/patch.yml                  # web + tools
+#   ansible-playbook playbooks/patch.yml -e target=role_web
+# Jenkins is excluded by default because rebooting it would kill the job that is patching.
+- name: Rolling OS patching
+  hosts: "{{ target | default('role_web:role_tools') }}"
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+
+  pre_tasks:
+    - name: Check free disk space on /
+      ansible.builtin.command: df --output=pcent /
+      register: disk
+      changed_when: false
+
+    - name: Stop if the disk is more than 90% full
+      ansible.builtin.assert:
+        that: (disk.stdout_lines[1] | trim | replace('%', '') | int) < 90
+        fail_msg: "Disk is {{ disk.stdout_lines[1] | trim }} full - clean up before patching"
+
+  tasks:
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        autoremove: true
+      register: upgrade
+
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: Reboot if required
+      ansible.builtin.reboot:
+        reboot_timeout: 600
+      when: reboot_required.stat.exists
+
+  post_tasks:
+    - name: Gather service status
+      ansible.builtin.service_facts:
+
+    - name: Verify key services are running
+      ansible.builtin.assert:
+        that: ansible_facts.services[item + '.service'].state == 'running'
+        fail_msg: "{{ item }} is not running after patching"
+      loop: "{{ ['nginx'] if 'role_web' in group_names else ['docker'] if 'role_tools' in group_names else [] }}"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: packages changed={{ upgrade.changed }}, rebooted={{ reboot_required.stat.exists }}"

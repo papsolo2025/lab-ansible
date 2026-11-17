@@ -1,0 +1,22 @@
+---
+# Two small "legacy" servers: targets for patching, hardening and disk-full drills.
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+
+- name: Simple status page
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    mode: "0644"
+    content: |
+      <html><body>
+      <h1>{{ inventory_hostname }}</h1>
+      <p>Legacy web server managed by Ansible.</p>
+      </body></html>
+
+- name: Start nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: started
+    enabled: true

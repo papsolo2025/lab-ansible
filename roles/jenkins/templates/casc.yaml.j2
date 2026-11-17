@@ -1,0 +1,41 @@
+# Jenkins Configuration as Code. ${VARS} are read from /opt/jenkins/.env at startup.
+jenkins:
+  systemMessage: "DevOps Lab Jenkins - configured as code. Do not change settings in the UI."
+  numExecutors: 3
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    url: "http://{{ ansible_host }}:8080/"
+
+security:
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false   # lab simplification: lets the seed job run Job DSL from Git without approval
+
+# The seed job reads lab-ops/jobs/*.groovy and creates every pipeline + scheduled automation job.
+jobs:
+  - script: |
+      job('seed-jobs') {
+        description('Creates all pipeline and automation jobs from the lab-ops repo. Re-run after changing jobs/*.groovy')
+        scm {
+          git {
+            remote { url('${LAB_OPS_REPO}') }
+            branch('*/main')
+          }
+        }
+        triggers { scm('H/15 * * * *') }
+        steps {
+          dsl {
+            external('jobs/*.groovy')
+            removeAction('DELETE')
+          }
+        }
+      }

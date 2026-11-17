@@ -1,0 +1,76 @@
+---
+- name: Fail early if the Jenkins admin password is not set
+  ansible.builtin.assert:
+    that: jenkins_admin_password | length >= 12
+    fail_msg: "export JENKINS_ADMIN_PASSWORD=... (12+ characters) before running this playbook"
+
+- name: Look up the docker group id (Jenkins container needs it to use the Docker socket)
+  ansible.builtin.getent:
+    database: group
+    key: docker
+
+# Same path on host and in the container, so `docker run -v $WORKSPACE:/src` works from pipelines.
+- name: Create Jenkins home on the host
+  ansible.builtin.file:
+    path: /var/jenkins_home
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0755"
+
+- name: Create Jenkins build directory
+  ansible.builtin.file:
+    path: /opt/jenkins
+    state: directory
+    mode: "0750"
+
+- name: Copy image definition
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/opt/jenkins/{{ item }}"
+    mode: "0640"
+  loop:
+    - Dockerfile
+    - plugins.txt
+    - casc.yaml
+    - docker-compose.yml
+  register: jenkins_files
+
+- name: Write secrets file for docker compose
+  ansible.builtin.copy:
+    dest: /opt/jenkins/.env
+    mode: "0600"
+    content: |
+      JENKINS_ADMIN_PASSWORD={{ jenkins_admin_password }}
+      TZ={{ lab_timezone }}
+      JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Duser.timezone={{ lab_timezone }}
+      AWS_REGION={{ aws_region }}
+      CLUSTER_NAME={{ cluster_name }}
+      NEXUS_URL=http://{{ hostvars[groups['role_tools'][0]]['private_ip_address'] }}:8081
+      SONAR_URL=http://{{ hostvars[groups['role_tools'][0]]['private_ip_address'] }}:9000
+      LAB_OPS_REPO={{ lab_ops_repo }}
+      LAB_APP_REPO={{ lab_app_repo }}
+      LAB_ANSIBLE_REPO={{ lab_ansible_repo }}
+      LAB_TERRAFORM_REPO={{ lab_terraform_repo }}
+      LAB_SERVERLESS_REPO={{ lab_serverless_repo }}
+  no_log: true
+
+- name: Build the custom image and start Jenkins
+  community.docker.docker_compose_v2:
+    project_src: /opt/jenkins
+    state: present
+    build: "{{ 'always' if jenkins_files.changed else 'policy' }}"
+    recreate: "{{ 'always' if jenkins_files.changed else 'auto' }}"
+
+- name: Wait for Jenkins to respond
+  ansible.builtin.uri:
+    url: http://localhost:8080/login
+    status_code: 200
+  register: jenkins_up
+  retries: 30
+  delay: 10
+  until: jenkins_up.status == 200
+
+- name: Show next steps
+  ansible.builtin.debug:
+    msg: "Jenkins: http://{{ ansible_host }}:8080  user=admin  (password = your JENKINS_ADMIN_PASSWORD)"

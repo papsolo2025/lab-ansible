@@ -1,0 +1,52 @@
+# Managed by Ansible - edit the template in lab-ansible, not this file.
+services:
+  nexus:
+    image: sonatype/nexus3:{{ nexus_version }}
+    container_name: nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      INSTALL4J_ADD_VM_PARAMS: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=2g"
+    volumes:
+      - nexus-data:/nexus-data
+
+  sonar-db:
+    image: postgres:{{ postgres_version }}
+    container_name: sonar-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: "{{ sonar_db_password }}"
+      POSTGRES_DB: sonar
+    volumes:
+      - sonar-db:/var/lib/postgresql/data
+
+  sonarqube:
+    image: sonarqube:{{ sonarqube_version }}
+    container_name: sonarqube
+    restart: unless-stopped
+    depends_on:
+      - sonar-db
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: "{{ sonar_db_password }}"
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+      nproc: 8192
+    volumes:
+      - sonar-data:/opt/sonarqube/data
+      - sonar-extensions:/opt/sonarqube/extensions
+      - sonar-logs:/opt/sonarqube/logs
+
+volumes:
+  nexus-data:
+  sonar-db:
+  sonar-data:
+  sonar-extensions:
+  sonar-logs:

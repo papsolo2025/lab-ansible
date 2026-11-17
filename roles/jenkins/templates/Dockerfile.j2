@@ -1,0 +1,42 @@
+# Custom Jenkins image: every tool the pipelines and automation jobs need, at pinned versions.
+FROM jenkins/jenkins:lts-jdk21
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg unzip zip jq git openssh-client \
+      python3 python3-venv postgresql-client \
+ && install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+ && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-buildx-plugin \
+ && rm -rf /var/lib/apt/lists/*
+
+# AWS CLI v2
+RUN curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscli.zip \
+ && unzip -q /tmp/awscli.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscli.zip
+
+# kubectl, helm, terraform, trivy (pinned)
+RUN curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v{{ kubectl_version }}/bin/linux/amd64/kubectl \
+ && chmod +x /usr/local/bin/kubectl \
+ && curl -fsSL https://get.helm.sh/helm-v{{ helm_version }}-linux-amd64.tar.gz | tar xz -C /tmp \
+ && mv /tmp/linux-amd64/helm /usr/local/bin/helm && rm -rf /tmp/linux-amd64 \
+ && curl -fsSLo /tmp/tf.zip https://releases.hashicorp.com/terraform/{{ terraform_version }}/terraform_{{ terraform_version }}_linux_amd64.zip \
+ && unzip -q /tmp/tf.zip terraform -d /usr/local/bin && rm /tmp/tf.zip \
+ && curl -fsSL https://github.com/aquasecurity/trivy/releases/download/v{{ trivy_version }}/trivy_{{ trivy_version }}_Linux-64bit.tar.gz \
+      | tar xz -C /usr/local/bin trivy
+
+# Ansible + AWS SDK in a virtualenv (used by the patching and cleanup jobs)
+RUN python3 -m venv /opt/ansible \
+ && /opt/ansible/bin/pip install --no-cache-dir ansible-core boto3 botocore \
+ && /opt/ansible/bin/ansible-galaxy collection install -p /usr/share/ansible/collections \
+      amazon.aws community.docker ansible.posix
+ENV PATH="/opt/ansible/bin:${PATH}"
+
+USER jenkins
+
+COPY --chown=jenkins:jenkins plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
+
+ENV CASC_JENKINS_CONFIG=/var/jenkins_casc/casc.yaml

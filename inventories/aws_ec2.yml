@@ -1,0 +1,15 @@
+# Dynamic inventory: finds lab servers by tag, so you never edit IP addresses by hand.
+# Used from your laptop (connects to PUBLIC IPs).
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-west-2
+filters:
+  tag:Project: devops-lab
+  instance-state-name: running
+hostnames:
+  - tag:Name
+keyed_groups:
+  - key: tags.Role
+    prefix: role   # creates groups role_jenkins, role_tools, role_web
+compose:
+  ansible_host: public_ip_address

@@ -28,7 +28,7 @@
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/opt/jenkins/{{ item }}"
-    mode: "0640"
+    mode: "{{ '0644' if item == 'casc.yaml' else '0640' }}"
   loop:
     - Dockerfile
     - plugins.txt
